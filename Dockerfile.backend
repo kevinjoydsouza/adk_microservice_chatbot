@@ -1,0 +1,47 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Google ADK
+RUN pip install google-adk
+
+# Copy application code
+COPY main.py models.py ./
+COPY services/ ./services/
+COPY middleware/ ./middleware/
+COPY academic-research/ ./academic-research/
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Expose ports (Backend on 8080, ADK on 8000)
+EXPOSE 8080
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+# Start ADK server in background\n\
+cd /app && adk api_server --host 0.0.0.0 --port 8000 &\n\
+# Wait for ADK server to start\n\
+sleep 5\n\
+# Start FastAPI backend\n\
+uvicorn main:app --host 0.0.0.0 --port 8080' > /app/start.sh
+
+RUN chmod +x /app/start.sh
+
+# Run both services
+CMD ["/app/start.sh"]
