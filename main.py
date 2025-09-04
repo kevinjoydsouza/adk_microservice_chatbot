@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+# Also try loading from academic-research/.env as fallback
+load_dotenv("academic-research/.env")
 
 from models import *
 from production_storage import SimpleMessageService
@@ -61,9 +63,12 @@ message_service = SimpleMessageService(
 )
 auth_service = AuthService()
 adk_service = ADKService()
+rfp_adk_service = ADKService(app_name="rfp-research")
 
 # Mount static files for uploads
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Mount static files for RFP documents
+app.mount("/rfp-documents", StaticFiles(directory="teamcentre_mock/opportunities"), name="rfp_documents")
 
 # Upload directory
 UPLOAD_DIR = "uploads"
@@ -94,11 +99,17 @@ async def create_conversation(
     user = Depends(get_current_user)
 ):
     """Create a new conversation"""
-    # Create conversation using message service
-    conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
-    # Note: For full conversation management, implement in message_service
-    conversation = {"id": conversation_id, "title": request.title}
-    return conversation
+    try:
+        conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+        conversation = message_service.create_conversation(
+            conversation_id=conversation_id,
+            user_id=user["uid"],
+            title=request.title
+        )
+        return conversation
+    except Exception as e:
+        logger.error(f"Error creating conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/conversations", response_model=List[ConversationResponse])
 async def get_conversations(
@@ -107,8 +118,12 @@ async def get_conversations(
     offset: int = Query(0, ge=0)
 ):
     """Get user's conversations with pagination"""
-    # For now, return empty list - implement conversation listing in message_service if needed
-    return []
+    try:
+        conversations = message_service.get_user_conversations(user["uid"], limit, offset)
+        return conversations
+    except Exception as e:
+        logger.error(f"Error fetching conversations: {str(e)}")
+        return []
 
 @app.get("/conversations/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
@@ -153,8 +168,15 @@ async def update_conversation_title(
     user = Depends(get_current_user)
 ):
     """Update conversation title"""
-    # For now, return success - implement title management in message_service if needed
-    return {"message": "Title updated successfully"}
+    try:
+        success = message_service.update_conversation_title(conversation_id, title)
+        if success:
+            return {"message": "Title updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    except Exception as e:
+        logger.error(f"Error updating conversation title: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/conversations/{conversation_id}")
 async def delete_conversation(
@@ -208,25 +230,39 @@ chat_history = []
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    user = Depends(get_current_user)
+    user = Depends(get_current_user),
+    request_id: Optional[str] = Query(None, description="RFP Request ID for RFP-specific uploads")
 ):
-    """Upload a file and return its URL"""
+    """Upload a file and return its URL. If request_id is provided, saves to RFP-specific folder."""
     try:
         # Generate unique filename
         file_extension = os.path.splitext(file.filename)[1]
         unique_filename = f"{uuid.uuid4()}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        
+        # Determine upload directory based on request_id
+        if request_id and request_id.startswith("RFP_"):
+            # RFP-specific upload
+            rfp_documents_dir = f"teamcentre_mock/opportunities/{request_id}/documents"
+            os.makedirs(rfp_documents_dir, exist_ok=True)
+            file_path = os.path.join(rfp_documents_dir, unique_filename)
+            file_url = f"/rfp-documents/{request_id}/{unique_filename}"
+        else:
+            # General upload
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            file_url = f"/uploads/{unique_filename}"
         
         # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Return file URL
-        file_url = f"/uploads/{unique_filename}"
         return {
             "filename": file.filename,
+            "original_filename": file.filename,
+            "stored_filename": unique_filename,
             "file_url": file_url,
-            "file_size": os.path.getsize(file_path)
+            "file_size": os.path.getsize(file_path),
+            "request_id": request_id,
+            "upload_type": "rfp" if request_id else "general"
         }
     except Exception as e:
         logger.error(f"File upload error: {str(e)}")
@@ -253,6 +289,8 @@ async def chat_endpoint(
             title = " ".join(title_words) + ("..." if len(user_input.split()) > 4 else "")
             
             conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+            # Create conversation in storage
+            message_service.create_conversation(conversation_id, user["uid"], title)
         
         # Add user message with attachments
         user_metadata = MessageMetadata(attachments=attachments) if attachments else None
@@ -353,6 +391,122 @@ async def chat_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/rfp-chat")
+async def rfp_chat_endpoint(
+    request: dict,
+    user = Depends(get_current_user)
+):
+    """Chat with RFP Research Agent for opportunity management and proposal generation"""
+    try:
+        user_input = request.get("user_input")
+        session_id = request.get("session_id")
+        conversation_id = request.get("conversation_id")
+        streaming = request.get("streaming", False)
+        attachments = request.get("attachments", [])
+        
+        if not user_input:
+            raise HTTPException(status_code=400, detail="user_input is required")
+        
+        user_id = user["uid"]
+        
+        # Get or create RFP ADK session
+        session_id, session_data = await rfp_adk_service.get_or_create_session(
+            user_id=user_id,
+            session_id=session_id
+        )
+        
+        # Create Firestore conversation if not provided
+        if not conversation_id:
+            title_words = user_input.split()[:4]
+            title = " ".join(title_words) + ("..." if len(user_input.split()) > 4 else "")
+            
+            conversation_id = f"rfp_{uuid.uuid4().hex[:12]}"
+            message_service.create_conversation(conversation_id, user["uid"], title)
+        
+        # Add user message
+        message_service.add_message_to_conversation(
+            conversation_id=conversation_id,
+            role="user",
+            content=user_input
+        )
+        
+        # Process attachments for RFP context
+        processed_attachments = []
+        if attachments:
+            # Try to get current request_id from session or extract from conversation
+            current_request_id = None
+            try:
+                session_data = await rfp_adk_service.get_session(user_id, session_id)
+                if session_data and "request_id" in session_data:
+                    current_request_id = session_data["request_id"]
+            except:
+                pass
+            
+            # Process each attachment with RFP context
+            for attachment_url in attachments:
+                try:
+                    # Convert general upload URLs to RFP-specific paths if needed
+                    if "/uploads/" in attachment_url and current_request_id:
+                        # Move file from general uploads to RFP-specific location
+                        general_filename = attachment_url.split("/")[-1]
+                        general_path = f"uploads/{general_filename}"
+                        
+                        if os.path.exists(general_path):
+                            # Create RFP documents directory
+                            rfp_documents_dir = f"teamcentre_mock/opportunities/{current_request_id}/documents"
+                            os.makedirs(rfp_documents_dir, exist_ok=True)
+                            
+                            # Move file to RFP location
+                            rfp_path = f"{rfp_documents_dir}/{general_filename}"
+                            shutil.move(general_path, rfp_path)
+                            
+                            # Update attachment URL
+                            attachment_url = f"/rfp-documents/{current_request_id}/{general_filename}"
+                    
+                    processed_attachments.append(attachment_url)
+                except Exception as e:
+                    logger.error(f"Error processing RFP attachment {attachment_url}: {str(e)}")
+                    processed_attachments.append(attachment_url)
+
+        # Process with RFP agent
+        try:
+            events = await rfp_adk_service.run_agent(user_id, session_id, user_input, processed_attachments)
+            response_text = rfp_adk_service.extract_response_text(events)
+            
+            # Save assistant response
+            message_service.add_message_to_conversation(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=response_text
+            )
+            
+            return {
+                "response": response_text,
+                "session_id": session_id,
+                "conversation_id": conversation_id,
+                "agent_type": "rfp_research"
+            }
+        except Exception as rfp_error:
+            logger.error(f"RFP agent error: {str(rfp_error)}")
+            error_message = f"RFP Agent Error: {str(rfp_error)}"
+            
+            message_service.add_message_to_conversation(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=error_message
+            )
+            
+            return {
+                "response": error_message,
+                "session_id": session_id,
+                "conversation_id": conversation_id,
+                "error": True
+            }
+            
+    except Exception as e:
+        logger.error(f"RFP Chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/adk-chat")
 async def adk_chat_endpoint(
     request: dict,
@@ -383,6 +537,8 @@ async def adk_chat_endpoint(
             title = " ".join(title_words) + ("..." if len(user_input.split()) > 4 else "")
             
             conversation_id = f"conv_{uuid.uuid4().hex[:12]}"
+            # Create conversation in storage
+            message_service.create_conversation(conversation_id, user["uid"], title)
         
         # Process attachments for ADK
         enhanced_message = user_input
@@ -482,7 +638,7 @@ async def adk_chat_endpoint(
         else:
             # Non-streaming response
             try:
-                events = await adk_service.run_agent(user_id, session_id, enhanced_message)
+                events = await adk_service.run_agent(user_id, session_id, enhanced_message, attachments)
                 response_text = adk_service.extract_response_text(events)
                 
                 # Save assistant response

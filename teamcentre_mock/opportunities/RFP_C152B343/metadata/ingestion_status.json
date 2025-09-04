@@ -1,0 +1,20 @@
+{
+  "request_id": "RFP_C152B343",
+  "status": "in_progress",
+  "started_at": "2025-09-04T15:56:05.800098",
+  "total_files": 1,
+  "processed_files": 0,
+  "current_file": null,
+  "progress_percentage": 0,
+  "files": [
+    {
+      "filename": "unknown",
+      "stored_filename": "unknown",
+      "file_url": "",
+      "size": 0,
+      "type": "unknown",
+      "status": "pending",
+      "processed_at": null
+    }
+  ]
+}

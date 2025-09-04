@@ -7,7 +7,7 @@ from . import prompt
 from .sub_agents.academic_newresearch import academic_newresearch_agent
 from .sub_agents.academic_websearch import academic_websearch_agent
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 
 # academic_coordinator = LlmAgent(

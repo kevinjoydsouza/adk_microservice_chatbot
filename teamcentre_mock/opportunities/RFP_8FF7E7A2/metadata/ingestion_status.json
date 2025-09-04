@@ -1,0 +1,18 @@
+{
+  "request_id": "RFP_8FF7E7A2",
+  "status": "in_progress",
+  "started_at": "2025-09-04T11:00:43.726473",
+  "total_files": 1,
+  "processed_files": 0,
+  "current_file": null,
+  "progress_percentage": 0,
+  "files": [
+    {
+      "filename": "unknown",
+      "size": 0,
+      "type": "unknown",
+      "status": "pending",
+      "processed_at": null
+    }
+  ]
+}

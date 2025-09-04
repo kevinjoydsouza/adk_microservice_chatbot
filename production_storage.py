@@ -8,6 +8,9 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Local fallback storage
 class LocalStorage:
@@ -68,6 +71,74 @@ class LocalStorage:
         # Sort by timestamp
         messages.sort(key=lambda x: x["timestamp"])
         return messages
+    
+    def create_conversation(self, conversation_id: str, user_id: str, title: str) -> dict:
+        """Create a new conversation."""
+        conversation_data = {
+            "id": conversation_id,
+            "user_id": user_id,
+            "title": title,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "message_count": 0
+        }
+        
+        with open(f"{self.storage_dir}/conversations/{conversation_id}.json", "w") as f:
+            json.dump(conversation_data, f, indent=2)
+        
+        return {
+            "id": conversation_id,
+            "title": title,
+            "created_at": conversation_data["created_at"]
+        }
+    
+    def get_user_conversations(self, user_id: str, limit: int = 50, offset: int = 0) -> list:
+        """Get all conversations for a user."""
+        conversations = []
+        conv_dir = f"{self.storage_dir}/conversations"
+        
+        if not os.path.exists(conv_dir):
+            return conversations
+        
+        for filename in os.listdir(conv_dir):
+            if filename.endswith('.json'):
+                try:
+                    with open(f"{conv_dir}/{filename}", "r") as f:
+                        data = json.load(f)
+                        if data.get("user_id") == user_id:
+                            conversations.append({
+                                "id": data["id"],
+                                "title": data["title"],
+                                "created_at": data["created_at"],
+                                "message_count": data.get("message_count", 0)
+                            })
+                except:
+                    continue
+        
+        # Sort by created_at descending
+        conversations.sort(key=lambda x: x["created_at"], reverse=True)
+        return conversations[offset:offset+limit]
+    
+    def update_conversation_title(self, conversation_id: str, title: str) -> bool:
+        """Update conversation title."""
+        conv_file = f"{self.storage_dir}/conversations/{conversation_id}.json"
+        
+        if not os.path.exists(conv_file):
+            return False
+        
+        try:
+            with open(conv_file, "r") as f:
+                data = json.load(f)
+            
+            data["title"] = title
+            data["updated_at"] = datetime.utcnow().isoformat()
+            
+            with open(conv_file, "w") as f:
+                json.dump(data, f, indent=2)
+            
+            return True
+        except Exception:
+            return False
 
 try:
     from google.cloud import storage
@@ -242,3 +313,65 @@ class SimpleMessageService:
             })
         
         return messages
+    
+    def create_conversation(self, conversation_id: str, user_id: str, title: str) -> dict:
+        """Create a new conversation."""
+        if self.storage_type == "local":
+            return self.storage.create_conversation(conversation_id, user_id, title)
+        
+        # Cloud storage logic
+        conversation_data = {
+            "id": conversation_id,
+            "user_id": user_id,
+            "title": title,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "message_count": 0
+        }
+        
+        self.storage.firestore_client.collection("conversations").document(conversation_id).set(conversation_data)
+        return {
+            "id": conversation_id,
+            "title": title,
+            "created_at": conversation_data["created_at"].isoformat()
+        }
+    
+    def get_user_conversations(self, user_id: str, limit: int = 50, offset: int = 0) -> list:
+        """Get all conversations for a user."""
+        if self.storage_type == "local":
+            return self.storage.get_user_conversations(user_id, limit, offset)
+        
+        # Cloud storage logic
+        conversations = []
+        docs = self.storage.firestore_client.collection("conversations")\
+                   .where("user_id", "==", user_id)\
+                   .order_by("updated_at", direction=firestore.Query.DESCENDING)\
+                   .limit(limit).offset(offset).get()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            conversations.append({
+                "id": data["id"],
+                "title": data["title"],
+                "created_at": data["created_at"].isoformat() if hasattr(data["created_at"], 'isoformat') else str(data["created_at"]),
+                "message_count": data.get("message_count", 0)
+            })
+        
+        return conversations
+    
+    def update_conversation_title(self, conversation_id: str, title: str) -> bool:
+        """Update conversation title."""
+        if self.storage_type == "local":
+            return self.storage.update_conversation_title(conversation_id, title)
+        
+        # Cloud storage logic
+        try:
+            doc_ref = self.storage.firestore_client.collection("conversations").document(conversation_id)
+            doc_ref.update({
+                "title": title,
+                "updated_at": datetime.utcnow()
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Error updating conversation title: {str(e)}")
+            return False

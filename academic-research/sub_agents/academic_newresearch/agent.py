@@ -31,7 +31,7 @@ from google.adk import Agent
 
 from . import prompt
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 academic_newresearch_agent = Agent(
     model=MODEL,

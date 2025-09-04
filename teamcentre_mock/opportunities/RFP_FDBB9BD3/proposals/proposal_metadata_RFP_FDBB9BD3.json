@@ -1,0 +1,56 @@
+{
+  "request_id": "RFP_FDBB9BD3",
+  "generated_at": "2025-09-03T15:56:24.079620",
+  "file_path": "teamcentre_mock\\opportunities\\RFP_FDBB9BD3\\proposals\\proposal_RFP_FDBB9BD3_20250903_155624.md",
+  "status": "generated",
+  "outline": {
+    "understanding_requirements": {
+      "title": "Understanding of Requirements",
+      "content": "Requirements analysis",
+      "sections": [
+        "Client objectives",
+        "Scope of work",
+        "Technical requirements",
+        "Success criteria"
+      ]
+    },
+    "technical_approach": {
+      "sections": [
+        "Solution architecture",
+        "Implementation methodology",
+        "Quality assurance approach",
+        "Risk mitigation strategies"
+      ],
+      "title": "Technical Approach & Methodology"
+    },
+    "timeline_deliverables": {
+      "phases": [
+        "Phase 1: Analysis & Planning",
+        "Phase 2: Development & Implementation",
+        "Phase 3: Testing & Deployment",
+        "Phase 4: Documentation & Handover"
+      ],
+      "title": "Timeline & Deliverables",
+      "deadline": "TBD"
+    },
+    "team_qualifications": {
+      "sections": [
+        "Core team members",
+        "Relevant experience",
+        "Certifications and expertise",
+        "Past project successes"
+      ],
+      "title": "Team Qualifications & Experience"
+    },
+    "executive_summary": {
+      "key_points": [
+        "Understanding of client requirements",
+        "Proposed solution approach",
+        "Key benefits and value proposition",
+        "Timeline and deliverables overview"
+      ],
+      "content": "Proposal for RFP Project",
+      "title": "Executive Summary"
+    }
+  }
+}

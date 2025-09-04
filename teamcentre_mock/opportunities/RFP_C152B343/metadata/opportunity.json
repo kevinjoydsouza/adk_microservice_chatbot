@@ -1,0 +1,22 @@
+{
+  "request_id": "RFP_C152B343",
+  "project_details": {
+    "client": "HON",
+    "project_name": "Spyder",
+    "deadline": "September 8, 2025",
+    "requirements": "Airport construction in Bangalore",
+    "opportunity_id": "321",
+    "input_file_format": "DOCS"
+  },
+  "created_at": "2025-09-04T15:54:59.568808",
+  "status": "created",
+  "folder_structure": [
+    "documents/uploaded",
+    "documents/processed",
+    "documents/generated",
+    "metadata",
+    "proposals"
+  ],
+  "files_uploaded": [],
+  "processing_status": "pending"
+}

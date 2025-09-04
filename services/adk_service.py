@@ -3,6 +3,7 @@
 import httpx
 import json
 import uuid
+import os
 from typing import Dict, List, Any, Optional, AsyncGenerator
 from datetime import datetime
 import asyncio
@@ -13,9 +14,9 @@ logger = logging.getLogger(__name__)
 class ADKService:
     """Service for interacting with ADK API server endpoints."""
     
-    def __init__(self, adk_base_url: str = "http://localhost:8000"):
+    def __init__(self, adk_base_url: str = "http://localhost:8000", app_name: str = "academic-research"):
         self.base_url = adk_base_url
-        self.app_name = "academic-research"
+        self.app_name = app_name
         
     async def list_available_agents(self) -> List[str]:
         """Get list of available ADK agents."""
@@ -80,17 +81,57 @@ class ADKService:
                 logger.error(f"Failed to delete session: {e}")
                 return False
     
-    async def run_agent(self, user_id: str, session_id: str, message: str) -> List[Dict]:
+    async def run_agent(self, user_id: str, session_id: str, message: str, attachments: list = None) -> List[Dict]:
         """Run agent and get all events at once."""
+        # Prepare message parts according to ADK Content object format
+        message_parts = [{"text": message}]
+        
+        # Process attachments if provided
+        if attachments:
+            import google.generativeai as genai
+            
+            # Configure Gemini API for file uploads
+            GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+            if GOOGLE_API_KEY:
+                genai.configure(api_key=GOOGLE_API_KEY)
+            
+            for attachment_url in attachments:
+                try:
+                    # Convert URL to file path
+                    file_path = attachment_url.replace("/uploads/", "uploads/")
+                    if os.path.exists(file_path):
+                        # Upload file to Google API to get proper URI
+                        uploaded_file = genai.upload_file(file_path)
+                        
+                        # Add file as attachment part using proper ADK format
+                        message_parts.append({
+                            "file_data": {
+                                "file_uri": uploaded_file.uri,
+                                "mime_type": uploaded_file.mime_type
+                            }
+                        })
+                        
+                        logger.info(f"Uploaded file to Google API: {uploaded_file.uri}")
+                        logger.info(f"File name: {uploaded_file.name}, MIME type: {uploaded_file.mime_type}")
+                        logger.info(f"Message parts now: {message_parts}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing attachment {attachment_url}: {str(e)}")
+                    # Add as text reference if file processing fails
+                    message_parts.append({"text": f"\n[Attachment: {os.path.basename(attachment_url)}]"})
+        
+        # Use proper ADK Content object format
         payload = {
             "app_name": self.app_name,
             "user_id": user_id,
             "session_id": session_id,
             "new_message": {
-                "role": "user",
-                "parts": [{"text": message}]
+                "parts": message_parts,
+                "role": "user"
             }
         }
+        
+        logger.info(f"Sending payload to ADK: {payload}")
         
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
@@ -196,12 +237,22 @@ class ADKService:
                 # Check for direct text field
                 elif "text" in event:
                     response_parts.append(event["text"])
+                
+                # Check for response field (common in ADK responses)
+                elif "response" in event:
+                    response_parts.append(str(event["response"]))
+                
+                # Check for message field
+                elif "message" in event:
+                    response_parts.append(str(event["message"]))
         
         result = "".join(response_parts).strip()
         
         # If no text found, return a helpful message
         if not result:
             logger.warning(f"No response text found in events: {events}")
+            # Log the full event structure for debugging
+            logger.debug(f"Full events for debugging: {json.dumps(events, indent=2)}")
             return "I apologize, but I encountered an issue processing your request. Please try again."
         
         return result
@@ -222,3 +273,9 @@ class ADKService:
         # Create new session
         session_data = await self.create_session(user_id, session_id)
         return session_id, session_data
+    
+    def _get_mime_type(self, file_path: str) -> str:
+        """Get MIME type for a file."""
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(file_path)
+        return mime_type or "application/octet-stream"
