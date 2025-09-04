@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # ADK-enabled Backend Service
+  # ADK-enabled Backend Service (FastAPI + ADK)
   backend:
     build:
       context: .
@@ -11,14 +11,29 @@ services:
       - "8000:8000"  # ADK API Server
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - GOOGLE_CLOUD_STORAGE_BUCKET=${GOOGLE_CLOUD_STORAGE_BUCKET}
+      - USE_GCS_FOR_UPLOADS=${USE_GCS_FOR_UPLOADS:-false}
+      - USE_FIRESTORE_EMULATOR=${USE_FIRESTORE_EMULATOR:-true}
       - FIRESTORE_EMULATOR_HOST=firestore:8080
       - ADK_BASE_URL=http://localhost:8000
+      - BACKEND_URL=http://localhost:8080
     volumes:
       - ./uploads:/app/uploads
+      - ./teamcentre_mock:/app/teamcentre_mock
+      - ./service-account.json:/app/service-account.json:ro
     depends_on:
       - firestore
     networks:
       - chatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Streamlit Frontend
   frontend:
@@ -29,23 +44,42 @@ services:
       - "8501:8501"
     environment:
       - BACKEND_URL=http://backend:8080
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - chatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # Firestore Emulator (for development)
   firestore:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:latest
     ports:
-      - "8080:8080"
+      - "8088:8080"  # Changed to avoid conflict with backend
       - "4000:4000"
+    environment:
+      - CLOUDSDK_CORE_PROJECT=${GOOGLE_CLOUD_PROJECT:-demo-project}
     command: >
       sh -c "gcloud emulators firestore start 
              --host-port=0.0.0.0:8080 
-             --rules-file=/dev/null"
+             --rules-file=/dev/null
+             --project=${GOOGLE_CLOUD_PROJECT:-demo-project}"
     networks:
       - chatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   chatbot-network:
@@ -53,3 +87,4 @@ networks:
 
 volumes:
   uploads:
+  teamcentre_data:

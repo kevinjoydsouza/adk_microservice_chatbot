@@ -26,15 +26,9 @@ class FirestoreManager:
         
         self.db = firestore.Client(project=project_id) if project_id else firestore.Client()
         
-        # Collection names
-        self.collections = {
-            'conversations': 'conversations',
-            'messages': 'messages', 
-            'document_requests': 'document_requests',
-            'adk_sessions': 'adk_sessions',
-            'user_profiles': 'user_profiles',
-            'system_metadata': 'system_metadata'
-        }
+        # Import collection name mappings from config
+        from config import COLLECTIONS
+        self.collections = COLLECTIONS
     
     # ==================== COLLECTION SETUP ====================
     

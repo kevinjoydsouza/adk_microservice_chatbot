@@ -189,12 +189,14 @@ class ProductionStorage:
             message_doc["content_preview"] = content[:200] + "..." if len(content) > 200 else content
         
         # Store message document in Firestore
-        self.firestore_client.collection("messages").document(message_id).set(message_doc)
+        from config import COLLECTIONS
+        self.firestore_client.collection(COLLECTIONS["messages"]).document(message_id).set(message_doc)
         return message_id
     
     def get_message_content(self, message_id: str) -> Optional[str]:
         """Retrieve message content from appropriate storage."""
-        doc = self.firestore_client.collection("messages").document(message_id).get()
+        from config import COLLECTIONS
+        doc = self.firestore_client.collection(COLLECTIONS["messages"]).document(message_id).get()
         if not doc.exists:
             return None
         
@@ -233,7 +235,8 @@ class ProductionStorage:
             "metadata": metadata or {}
         }
         
-        self.firestore_client.collection("document_requests").document(request_id).set(doc_request)
+        from config import COLLECTIONS
+        self.firestore_client.collection(COLLECTIONS["document_requests"]).document(request_id).set(doc_request)
         return request_id
     
     def cleanup_old_content(self, days_old: int = 30):
@@ -292,7 +295,8 @@ class SimpleMessageService:
         
         # Cloud storage logic
         messages = []
-        docs = self.storage.firestore_client.collection("messages")\
+        from config import COLLECTIONS
+        docs = self.storage.firestore_client.collection(COLLECTIONS["messages"])\
                    .where("conversation_id", "==", conversation_id)\
                    .order_by("timestamp").get()
         
@@ -329,7 +333,8 @@ class SimpleMessageService:
             "message_count": 0
         }
         
-        self.storage.firestore_client.collection("conversations").document(conversation_id).set(conversation_data)
+        from config import COLLECTIONS
+        self.storage.firestore_client.collection(COLLECTIONS["conversations"]).document(conversation_id).set(conversation_data)
         return {
             "id": conversation_id,
             "title": title,
@@ -343,7 +348,8 @@ class SimpleMessageService:
         
         # Cloud storage logic
         conversations = []
-        docs = self.storage.firestore_client.collection("conversations")\
+        from config import COLLECTIONS
+        docs = self.storage.firestore_client.collection(COLLECTIONS["conversations"])\
                    .where("user_id", "==", user_id)\
                    .order_by("updated_at", direction=firestore.Query.DESCENDING)\
                    .limit(limit).offset(offset).get()
@@ -366,7 +372,8 @@ class SimpleMessageService:
         
         # Cloud storage logic
         try:
-            doc_ref = self.storage.firestore_client.collection("conversations").document(conversation_id)
+            from config import COLLECTIONS
+            doc_ref = self.storage.firestore_client.collection(COLLECTIONS["conversations"]).document(conversation_id)
             doc_ref.update({
                 "title": title,
                 "updated_at": datetime.utcnow()

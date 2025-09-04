@@ -1,19 +1,30 @@
+# FastAPI Backend Dependencies
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
+pydantic==2.5.0
+
+# Google AI & Cloud Services
 google-generativeai==0.3.2
 google-adk
-google-cloud-firestore
-google-cloud-storage
-google-generativeai
-fastapi
-uvicorn
-streamlit
-python-dotenv
-pydantic
-python-multipart
-pillow
-python-jose[cryptography]
-httpx==3.3.0
+google-cloud-firestore==2.13.1
+google-cloud-storage==2.10.0
+google-auth==2.23.4
+firebase-admin==6.2.0
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-streamlit==1.28.2
+
+# HTTP & Networking
+httpx==0.25.2
+requests==2.31.0
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# Image Processing
+pillow==10.1.0
+
+# File Handling
+pathlib2==2.3.7

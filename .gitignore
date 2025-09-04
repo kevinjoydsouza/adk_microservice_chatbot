@@ -61,6 +61,8 @@ logs/
 uploads/
 temp/
 local_storage/
+teamcentre_mock/
+local_uploads/
 *.tmp
 
 # Google Cloud credentials

@@ -23,8 +23,9 @@ load_dotenv("academic-research/.env")
 
 from models import *
 from production_storage import SimpleMessageService
-from services.auth_service import AuthService
 from services.adk_service import ADKService
+from services.auth_service import AuthService
+from services.gcs_service import get_gcs_service
 from middleware.error_handler import validation_exception_handler, http_exception_handler, general_exception_handler
 from config import VERTEX_AI_CONFIG, PRODUCTION_STORAGE
 
@@ -65,10 +66,12 @@ auth_service = AuthService()
 adk_service = ADKService()
 rfp_adk_service = ADKService(app_name="rfp-research")
 
-# Mount static files for uploads
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-# Mount static files for RFP documents
-app.mount("/rfp-documents", StaticFiles(directory="teamcentre_mock/opportunities"), name="rfp_documents")
+# Mount static files for uploads (only if not using GCS)
+from config import GCS_CONFIG
+if not GCS_CONFIG["use_gcs_for_uploads"]:
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+    # Mount static files for RFP documents
+    app.mount("/rfp-documents", StaticFiles(directory="teamcentre_mock/opportunities"), name="rfp_documents")
 
 # Upload directory
 UPLOAD_DIR = "uploads"
@@ -86,11 +89,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @app.get("/")
 async def root():
-    return {"message": "Gemini Chatbot Backend API", "version": "1.0.0"}
+    return {"message": "Gemini Chatbot Backend is running"}
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    """Health check endpoint for Docker"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "version": "1.0.0"}
 
 # Conversation endpoints
 @app.post("/conversations", response_model=ConversationResponse)
@@ -233,40 +237,54 @@ async def upload_file(
     user = Depends(get_current_user),
     request_id: Optional[str] = Query(None, description="RFP Request ID for RFP-specific uploads")
 ):
-    """Upload a file and return its URL. If request_id is provided, saves to RFP-specific folder."""
+    """Upload a file and return its URL. Uses GCS if configured, otherwise local storage."""
     try:
+        gcs_service = get_gcs_service()
+        
         # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_extension = os.path.splitext(file.filename)[1]
-        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        unique_filename = f"{timestamp}_{file.filename}"
         
-        # Determine upload directory based on request_id
-        if request_id and request_id.startswith("RFP_"):
-            # RFP-specific upload
-            rfp_documents_dir = f"teamcentre_mock/opportunities/{request_id}/documents"
-            os.makedirs(rfp_documents_dir, exist_ok=True)
-            file_path = os.path.join(rfp_documents_dir, unique_filename)
-            file_url = f"/rfp-documents/{request_id}/{unique_filename}"
+        # Read file content
+        content = await file.read()
+        
+        if gcs_service:
+            # Upload to GCS
+            if request_id and request_id.startswith("RFP_"):
+                gcs_path = gcs_service.generate_upload_path('rfp_documents', unique_filename, request_id)
+            else:
+                gcs_path = gcs_service.generate_upload_path('uploads', unique_filename)
+            
+            file_url = gcs_service.upload_file_content(content, gcs_path, file.content_type)
+            
         else:
-            # General upload
-            file_path = os.path.join(UPLOAD_DIR, unique_filename)
-            file_url = f"/uploads/{unique_filename}"
-        
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            # Local storage fallback
+            if request_id and request_id.startswith("RFP_"):
+                # RFP-specific upload
+                rfp_documents_dir = f"teamcentre_mock/opportunities/{request_id}/documents"
+                os.makedirs(rfp_documents_dir, exist_ok=True)
+                file_path = os.path.join(rfp_documents_dir, unique_filename)
+                file_url = f"/rfp-documents/{request_id}/documents/{unique_filename}"
+            else:
+                # General upload
+                file_path = os.path.join(UPLOAD_DIR, unique_filename)
+                file_url = f"/uploads/{unique_filename}"
+            
+            # Save file locally
+            with open(file_path, "wb") as buffer:
+                buffer.write(content)
         
         return {
             "filename": file.filename,
-            "original_filename": file.filename,
-            "stored_filename": unique_filename,
             "file_url": file_url,
-            "file_size": os.path.getsize(file_path),
-            "request_id": request_id,
-            "upload_type": "rfp" if request_id else "general"
+            "file_size": len(content),
+            "upload_time": datetime.now().isoformat(),
+            "storage_type": "gcs" if gcs_service else "local"
         }
     except Exception as e:
-        logger.error(f"File upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+        logger.error(f"Upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/chat")
 async def chat_endpoint(

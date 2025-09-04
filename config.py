@@ -9,16 +9,16 @@ from typing import Dict, List, Any
 # FIRESTORE CONFIGURATION
 # ================================
 
-# Collection Names
+# Collection Names with Version Suffix
 # Note: Firestore has a 1MB document size limit. Large content should be split across multiple documents
 # or stored in Cloud Storage with references in Firestore.
 COLLECTIONS = {
-    "conversations": "conversations",
-    "messages": "messages", 
-    "document_requests": "document_requests",
-    "adk_sessions": "adk_sessions",
-    "user_profiles": "user_profiles",
-    "system_metadata": "system_metadata"
+    "conversations": "conversations_v1",
+    "messages": "messages_v1", 
+    "document_requests": "document_requests_v1",
+    "adk_sessions": "adk_sessions_v1",
+    "user_profiles": "user_profiles_v1",
+    "system_metadata": "system_metadata_v1"
 }
 
 # To add a new collection:
@@ -193,10 +193,24 @@ UPLOAD_CONFIG = {
 
 # Production Storage Configuration
 PRODUCTION_STORAGE = {
-    "bucket_name": os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET", "intellisurf-ai-storage"),
+    "bucket_name": os.getenv('GOOGLE_CLOUD_STORAGE_BUCKET', 'intellisurf-ai-storage'),
     "content_size_threshold": int(os.getenv("CONTENT_SIZE_THRESHOLD", "500000")),  # 500KB
     "use_cloud_storage": bool(os.getenv("USE_CLOUD_STORAGE", "true").lower() == "true"),
     "cleanup_days": int(os.getenv("CLEANUP_OLD_CONTENT_DAYS", "30"))
+}
+
+# Google Cloud Storage Configuration
+GCS_CONFIG = {
+    "bucket_name": os.getenv('GOOGLE_CLOUD_STORAGE_BUCKET', 'intellisurf-ai-storage'),
+    "use_gcs_for_uploads": os.getenv('USE_GCS_FOR_UPLOADS', 'false').lower() == 'true'
+}
+
+# GCS Folder Structure
+GCS_FOLDERS = {
+    'uploads': 'uploads/',
+    'rfp_documents': 'teamcentre_mock/opportunities/',
+    'proposals': 'proposals/',
+    'temp': 'temp/'
 }
 
 # Session Management

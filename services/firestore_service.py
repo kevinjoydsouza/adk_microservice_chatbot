@@ -37,8 +37,10 @@ class FirestoreService:
             else:
                 self.db = firestore.client()
             
-            self.conversations_collection = "conversations"
-            self.messages_collection = "messages"
+            # Initialize collections using config
+            from config import COLLECTIONS
+            self.conversations_collection = COLLECTIONS["conversations"]
+            self.messages_collection = COLLECTIONS["messages"]
             
             if self.db:
                 print("Firestore client initialized successfully")
@@ -49,8 +51,10 @@ class FirestoreService:
             print(f"WARNING: Firebase initialization failed: {e}")
             print("Using mock data for development.")
             self.db = None
-            self.conversations_collection = "conversations"
-            self.messages_collection = "messages"
+            # Initialize collections using config even in mock mode
+            from config import COLLECTIONS
+            self.conversations_collection = COLLECTIONS["conversations"]
+            self.messages_collection = COLLECTIONS["messages"]
 
     async def create_conversation(
         self, 
