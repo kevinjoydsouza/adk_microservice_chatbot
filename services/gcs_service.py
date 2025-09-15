@@ -35,15 +35,11 @@ class GCSService:
         self.bucket = self.client.bucket(self.bucket_name)
     
     def _initialize_client(self) -> storage.Client:
-        """Initialize GCS client with proper authentication."""
+        """Initialize GCS client using Application Default Credentials (ADC)."""
         try:
-            if self.credentials_path and os.path.exists(self.credentials_path):
-                credentials = service_account.Credentials.from_service_account_file(self.credentials_path)
-                client = storage.Client(credentials=credentials)
-                print(f"🔑 Using service account: {self.credentials_path}")
-            else:
-                client = storage.Client()
-                print("🔑 Using Application Default Credentials")
+            # Always use Application Default Credentials
+            client = storage.Client()
+            print("🔑 Using Application Default Credentials (ADC)")
             
             # Test connection
             client.get_bucket(self.bucket_name)
@@ -52,6 +48,7 @@ class GCSService:
             
         except Exception as e:
             print(f"❌ Failed to connect to GCS: {e}")
+            print("💡 Ensure you have run: gcloud auth application-default login")
             raise
     
     def upload_file(self, file_path: str, gcs_path: str, content_type: str = None) -> str:

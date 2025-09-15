@@ -147,12 +147,11 @@ COLLECTION_SCHEMAS = {
 # VERTEX AI CONFIGURATION  
 # ================================
 
-# Vertex AI Settings
+# Vertex AI Settings - Uses Application Default Credentials (ADC)
 VERTEX_AI_CONFIG = {
     "project_id": os.getenv("GOOGLE_CLOUD_PROJECT", ""),
     "location": os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
-    "credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
-    "service_account_key": os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY", "")
+    "use_adc": True  # Always use Application Default Credentials
 }
 
 # ================================
@@ -178,8 +177,8 @@ FIRESTORE_CONFIG = {
 # AI Model Configuration
 AI_CONFIG = {
     "google_api_key": os.getenv("GOOGLE_API_KEY", ""),
-    "default_model": "gemini-2.5-pro",
-    "adk_agent_name": "intellisurf_research_agent",
+    "default_model": "gemini-2.0-flash",
+    "rfp_agent_name": "rfp_research_agent",
     "max_tokens": int(os.getenv("MAX_TOKENS", "8192")),
     "temperature": float(os.getenv("TEMPERATURE", "0.7"))
 }
@@ -367,3 +366,7 @@ CONFIG = {
     "upload": UPLOAD_CONFIG,
     "session": SESSION_CONFIG
 }
+
+
+# GEMINI_MODEL_ADK = os.getenv("GEMINI_MODEL_ADK", "gemini-2.5-flash")
+# GEMINI_MODEL_BCK = os.getenv("GEMINI_MODEL_BCK", "gemini-2.5-flash")
